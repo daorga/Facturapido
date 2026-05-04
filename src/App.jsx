@@ -119,9 +119,12 @@ export default function App() {
             {type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64}},
             {type:"text",text:`Analiza este ticket de supermercado mexicano. Responde SOLO con JSON válido, sin markdown ni texto extra:
 {"establecimiento":"walmart|lacomer|costco|chedraui|otro","nombreEstablecimiento":"texto","folio":"string|null","tc":"SOLO Walmart: campo TC|null","tr":"SOLO Walmart: campo TR|null","codigoBarras":"SOLO Costco: número bajo código de barras|null","fecha":"DD/MM/YYYY|null","hora":"HH:MM|null","total":numero_o_null,"subtotal":numero_o_null,"iva":numero_o_null,"sucursal":"string|null","confianza":"alta|media|baja"}
-WALMART TC: Busca la línea que contiene "TC#" o "TC". El TC son los 21 dígitos que siguen inmediatamente después del símbolo #. Ignora el # y cualquier letra antes. Correcciones obligatorias dígito por dígito: I→1, l→1, O→0, S→5, B→8, Z→2, G→6, q→9. El último carácter frecuentemente es confundido entre l y 1 — siempre es 1. Cuenta los dígitos: deben ser exactamente 21.
-WALMART TR: Busca "TR" o "TRW" en la misma línea que el TC. Copia el valor exacto incluyendo letras y números.
-COSTCO: número DEBAJO del código de barras, NO el de membresía.
+WALMART TC: Busca la línea que contiene "TC#" o "TC". El TC son los 21 dígitos que siguen inmediatamente después del símbolo #. Ignora el # y cualquier letra antes. Correcciones obligatorias dígito por dígito: I→1, l→1, O→0, S→5, B→8, Z→2, G→6, q→9. El último carácter frecuentemente es confundido entre l y 1 — siempre es 1. Cuenta los dígitos: deben ser exactamente 21. SIN espacios.
+WALMART TR: Busca "TR" o "TRW" en la misma línea que el TC. Copia el valor exacto incluyendo letras y números. SIN espacios.
+COSTCO: número DEBAJO del código de barras, NO el de membresía. SIN espacios.
+CHEDRAUI folio: el folio tiene exactamente 20 dígitos. SIN espacios ni guiones.
+LA COMER folio: copia el folio exactamente como aparece. SIN espacios.
+TODOS LOS CAMPOS NUMÉRICOS: nunca incluyas espacios internos en ningún número o código.
 Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
           ]}]
         })
@@ -137,6 +140,10 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
         let tc=parsed.tc.toString().replace(/\s/g,"").replace(/[IlÍí|]/g,"1").replace(/[OoÓó]/g,"0").replace(/[Ss]/g,"5").replace(/[Bb]/g,"8").replace(/[Zz]/g,"2").replace(/[Gg]/g,"6").replace(/[^0-9]/g,"")
         parsed.tc=tc; parsed.tcValido=tc.length===21
       }
+      // Strip spaces from all code fields
+      if(parsed.tr) parsed.tr=parsed.tr.toString().replace(/\s/g,"")
+      if(parsed.codigoBarras) parsed.codigoBarras=parsed.codigoBarras.toString().replace(/\s/g,"")
+      if(parsed.folio) parsed.folio=parsed.folio.toString().replace(/\s/g,"")
       setTicketData(parsed); setView("result")
     } catch(e){
       setError("Error: "+(e?.message||"desconocido")); setView("scan")
@@ -324,9 +331,10 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
 
     const getTicketToSave = () => ({
       ...ticketData,
-      tc: editTC,
-      tr: editTR,
-      codigoBarras: editCB,
+      tc: editTC||ticketData.tc,
+      tr: editTR||ticketData.tr,
+      codigoBarras: isC?editCB:ticketData.codigoBarras,
+      folio: (!isW&&!isC)?editCB:ticketData.folio,
       tcValido,
     })
 
@@ -350,46 +358,53 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
           ))}
         </div>}
 
-        {/* Editable key fields for Walmart */}
-        {isW&&<div style={{...s.card,marginBottom:11}}>
-          <span style={s.lbl}>Campos para facturar — edita si hay error</span>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:5}}>TC (21 dígitos)</div>
-            <input style={{...s.input,fontFamily:"monospace",fontSize:14,letterSpacing:"0.5px",borderColor:tcValido?C.green:"rgba(251,191,36,0.5)"}}
-              value={editTC} onChange={e=>setEditTC(e.target.value.replace(/[^0-9]/g,"").slice(0,21))}
-              placeholder="21 dígitos numéricos" maxLength={21}/>
-            <div style={{fontSize:11,marginTop:4,color:tcValido?C.green:C.yellow}}>
-              {editTC.length}/21 dígitos {tcValido?"✓":"— faltan "+(21-editTC.length)}
-            </div>
-            <button onClick={()=>copy(editTC,"tc_edit")} style={{...s.ghost,fontSize:11,padding:"5px 10px",marginTop:5}}>
-              {copied==="tc_edit"?"✓ Copiado":"⎘ Copiar TC"}
-            </button>
-          </div>
-          <div>
-            <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:5}}>TR</div>
-            <input style={{...s.input,fontFamily:"monospace",fontSize:14}} value={editTR} onChange={e=>setEditTR(e.target.value)} placeholder="TR del ticket"/>
-            <button onClick={()=>copy(editTR,"tr_edit")} style={{...s.ghost,fontSize:11,padding:"5px 10px",marginTop:5}}>
-              {copied==="tr_edit"?"✓ Copiado":"⎘ Copiar TR"}
-            </button>
-          </div>
-        </div>}
-
-        {/* Editable field for Costco */}
-        {isC&&<div style={{...s.card,marginBottom:11}}>
-          <span style={s.lbl}>Núm. bajo código de barras — edita si hay error</span>
-          <input style={{...s.input,fontFamily:"monospace",fontSize:14}} value={editCB} onChange={e=>setEditCB(e.target.value)} placeholder="Número bajo el código de barras"/>
-          <button onClick={()=>copy(editCB,"cb_edit")} style={{...s.ghost,fontSize:11,padding:"5px 10px",marginTop:5}}>
-            {copied==="cb_edit"?"✓ Copiado":"⎘ Copiar"}
-          </button>
-        </div>}
-
         <div style={s.card}>
-          <span style={s.lbl}>Resto de datos — toca para copiar</span>
-          {fields.map(f=>(
-            <div key={f.key} onClick={()=>copy(f.val,f.key)} style={{...s.row}}>
-              <div style={{flex:1,minWidth:0}}>
+          <span style={s.lbl}>Datos para facturar — edita si hay error · toca para copiar</span>
+
+          {/* Walmart: TC y TR */}
+          {isW&&<>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>TC (21 dígitos)</div>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input style={{...s.input,fontFamily:"monospace",fontSize:13,flex:1,borderColor:tcValido?C.green:"rgba(251,191,36,0.5)"}}
+                  value={editTC} onChange={e=>setEditTC(e.target.value.replace(/[^0-9]/g,"").slice(0,21))} placeholder="21 dígitos" maxLength={21}/>
+                <button onClick={()=>copy(editTC,"tc_edit")} style={{...s.ghost,fontSize:12,padding:"9px 12px",flexShrink:0}}>{copied==="tc_edit"?"✓":"⎘"}</button>
+              </div>
+              <div style={{fontSize:11,marginTop:3,color:tcValido?C.green:C.yellow}}>{editTC.length}/21 {tcValido?"✓ correcto":"— faltan "+(21-editTC.length)}</div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>TR</div>
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <input style={{...s.input,fontFamily:"monospace",fontSize:13,flex:1}} value={editTR} onChange={e=>setEditTR(e.target.value)} placeholder="TR del ticket"/>
+                <button onClick={()=>copy(editTR,"tr_edit")} style={{...s.ghost,fontSize:12,padding:"9px 12px",flexShrink:0}}>{copied==="tr_edit"?"✓":"⎘"}</button>
+              </div>
+            </div>
+          </>}
+
+          {/* Costco: número bajo código de barras */}
+          {isC&&<div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Núm. bajo código de barras</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input style={{...s.input,fontFamily:"monospace",fontSize:13,flex:1}} value={editCB} onChange={e=>setEditCB(e.target.value)} placeholder="Número del ticket"/>
+              <button onClick={()=>copy(editCB,"cb_edit")} style={{...s.ghost,fontSize:12,padding:"9px 12px",flexShrink:0}}>{copied==="cb_edit"?"✓":"⎘"}</button>
+            </div>
+          </div>}
+
+          {/* La Comer / Chedraui: folio */}
+          {!isW&&!isC&&<div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:4}}>Folio</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <input style={{...s.input,fontFamily:"monospace",fontSize:13,flex:1}} value={editCB} onChange={e=>setEditCB(e.target.value)} placeholder="Folio del ticket"/>
+              <button onClick={()=>copy(editCB,"folio_edit")} style={{...s.ghost,fontSize:12,padding:"9px 12px",flexShrink:0}}>{copied==="folio_edit"?"✓":"⎘"}</button>
+            </div>
+          </div>}
+
+          {/* Fecha y Total — siempre visibles y copiables */}
+          {fields.filter(f=>["fecha","total"].includes(f.key)).map(f=>(
+            <div key={f.key} onClick={()=>copy(f.val,f.key)} style={{...s.row,marginBottom:7}}>
+              <div style={{flex:1}}>
                 <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>{f.label}</div>
-                <div style={{fontSize:15,fontWeight:600,marginTop:2,fontFamily:f.mono?"monospace":"inherit",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.val}</div>
+                <div style={{fontSize:15,fontWeight:600,marginTop:2}}>{f.val}</div>
               </div>
               <span style={{fontSize:13,opacity:copied===f.key?1:0.2,color:copied===f.key?C.green:"#fff",transition:"all 0.2s",flexShrink:0}}>{copied===f.key?"✓":"⎘"}</span>
             </div>
