@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react"
+import React, { useState, useRef, useCallback, useEffect } from "react"
 import { supabase } from "./supabase.js"
 
 // API key stored locally on device — never leaves the phone
@@ -28,12 +28,12 @@ const compressImg = f => new Promise(resolve => {
   const img = new Image()
   img.onload = () => {
     try {
-      const MAX=2000, {naturalWidth:ow, naturalHeight:oh}=img
+      const MAX=1400, {naturalWidth:ow, naturalHeight:oh}=img
       let w=ow, h=oh
       if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX}else{w=Math.round(w*MAX/h);h=MAX} }
       const cv=document.createElement("canvas"); cv.width=w; cv.height=h
       cv.getContext("2d").drawImage(img,0,0,w,h)
-      cv.toBlob(b=>resolve(b&&b.size>0?b:f),"image/jpeg",0.92)
+      cv.toBlob(b=>resolve(b&&b.size>0?b:f),"image/jpeg",0.85)
     } catch { resolve(f) }
   }
   img.onerror=()=>resolve(f)
@@ -101,9 +101,9 @@ export default function App() {
 
   // ── OCR ──────────────────────────────────────────────────────────────
   const processImage = useCallback(async (file)=>{
-const currentKey = localStorage.getItem("fr_api_key")||""
-if(!currentKey){ setError("Primero configura tu API key de Anthropic en ⚙️ Configuración"); setView("scan"); return }
-setScanning(true); setError(null)
+    const currentKey = localStorage.getItem("fr_api_key")||""
+    if(!currentKey){ setError("Primero configura tu API key de Anthropic en ⚙️ Configuración"); setView("scan"); return }
+    setScanning(true); setError(null)
     try { setImgDataURL(await toDataURL(file)) } catch{}
     let send=file
     try { send=await compressImg(file) } catch{}
@@ -119,9 +119,8 @@ setScanning(true); setError(null)
             {type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64}},
             {type:"text",text:`Analiza este ticket de supermercado mexicano. Responde SOLO con JSON válido, sin markdown ni texto extra:
 {"establecimiento":"walmart|lacomer|costco|chedraui|otro","nombreEstablecimiento":"texto","folio":"string|null","tc":"SOLO Walmart: campo TC|null","tr":"SOLO Walmart: campo TR|null","codigoBarras":"SOLO Costco: número bajo código de barras|null","fecha":"DD/MM/YYYY|null","hora":"HH:MM|null","total":numero_o_null,"subtotal":numero_o_null,"iva":numero_o_null,"sucursal":"string|null","confianza":"alta|media|baja"}
-WALMART TC: es un número de EXACTAMENTE 21 dígitos consecutivos que aparece junto a las letras "TC" en el ticket. Lee cada dígito uno por uno de izquierda a derecha. Correcciones obligatorias: I→1, l→1, O→0, S→5, B→8, Z→2, G→6, q→9. Cuenta los dígitos al terminar — si no son exactamente 21 vuelve a leer. NUNCA agregues ni omitas dígitos. Sin espacios ni guiones.
-WALMART TR: el valor junto a las letras "TR" en el ticket, copiado exactamente.
-TODOS LOS NÚMEROS: lee con máxima precisión. Si un dígito no está claro, analiza el contexto (posición, grosor del trazo) para decidir entre opciones similares como 1/7, 0/6, 3/8, 5/6.
+WALMART TC: Busca la línea que contiene "TC#" o "TC". El TC son los 21 dígitos que siguen inmediatamente después del símbolo #. Ignora el # y cualquier letra antes. Correcciones obligatorias dígito por dígito: I→1, l→1, O→0, S→5, B→8, Z→2, G→6, q→9. El último carácter frecuentemente es confundido entre l y 1 — siempre es 1. Cuenta los dígitos: deben ser exactamente 21.
+WALMART TR: Busca "TR" o "TRW" en la misma línea que el TC. Copia el valor exacto incluyendo letras y números.
 COSTCO: número DEBAJO del código de barras, NO el de membresía.
 Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
           ]}]
@@ -308,16 +307,29 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
     const isW=ticketData.establecimiento==="walmart", isC=ticketData.establecimiento==="costco"
     const st=STORES[ticketData.establecimiento], tNum=parseAmt(ticketData.total)
     const newTotal=totalQ+tNum, newPct=meta>0?Math.min((newTotal/meta)*100,100):0
+
+    // Editable key fields
+    const [editTC, setEditTC] = React.useState(ticketData.tc||"")
+    const [editTR, setEditTR] = React.useState(ticketData.tr||"")
+    const [editCB, setEditCB] = React.useState(ticketData.codigoBarras||"")
+    const tcValido = editTC.length===21
+
     const fields=[
-      isW?{key:"tc",label:"TC (Walmart)",val:ticketData.tc,mono:true,warn:ticketData.tc&&!ticketData.tcValido?`⚠️ ${ticketData.tc?.length} dígitos — deben ser 21`:ticketData.tcValido?"✓ 21 dígitos":null}:null,
-      isW?{key:"tr",label:"TR (Walmart)",val:ticketData.tr,mono:true}:null,
-      isC?{key:"cb",label:"Núm. bajo código de barras",val:ticketData.codigoBarras,mono:true}:null,
       !isW&&!isC?{key:"folio",label:"Folio",val:ticketData.folio,mono:true}:null,
       {key:"fecha",label:"Fecha",val:ticketData.fecha},{key:"hora",label:"Hora",val:ticketData.hora},{key:"sucursal",label:"Sucursal",val:ticketData.sucursal},
       {key:"subtotal",label:"Subtotal",val:ticketData.subtotal?fmt(parseAmt(ticketData.subtotal)):null},
       {key:"iva",label:"IVA",val:ticketData.iva?fmt(parseAmt(ticketData.iva)):null},
       {key:"total",label:"Total",val:tNum?fmt(tNum):null},
     ].filter(f=>f&&f.val)
+
+    const getTicketToSave = () => ({
+      ...ticketData,
+      tc: editTC,
+      tr: editTR,
+      codigoBarras: editCB,
+      tcValido,
+    })
+
     return(
       <div>
         <button style={{...s.ghost,marginBottom:14,fontSize:12}} onClick={()=>setView("scan")}>← Escanear otro</button>
@@ -337,14 +349,47 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
             </div>
           ))}
         </div>}
+
+        {/* Editable key fields for Walmart */}
+        {isW&&<div style={{...s.card,marginBottom:11}}>
+          <span style={s.lbl}>Campos para facturar — edita si hay error</span>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:5}}>TC (21 dígitos)</div>
+            <input style={{...s.input,fontFamily:"monospace",fontSize:14,letterSpacing:"0.5px",borderColor:tcValido?C.green:"rgba(251,191,36,0.5)"}}
+              value={editTC} onChange={e=>setEditTC(e.target.value.replace(/[^0-9]/g,"").slice(0,21))}
+              placeholder="21 dígitos numéricos" maxLength={21}/>
+            <div style={{fontSize:11,marginTop:4,color:tcValido?C.green:C.yellow}}>
+              {editTC.length}/21 dígitos {tcValido?"✓":"— faltan "+(21-editTC.length)}
+            </div>
+            <button onClick={()=>copy(editTC,"tc_edit")} style={{...s.ghost,fontSize:11,padding:"5px 10px",marginTop:5}}>
+              {copied==="tc_edit"?"✓ Copiado":"⎘ Copiar TC"}
+            </button>
+          </div>
+          <div>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:5}}>TR</div>
+            <input style={{...s.input,fontFamily:"monospace",fontSize:14}} value={editTR} onChange={e=>setEditTR(e.target.value)} placeholder="TR del ticket"/>
+            <button onClick={()=>copy(editTR,"tr_edit")} style={{...s.ghost,fontSize:11,padding:"5px 10px",marginTop:5}}>
+              {copied==="tr_edit"?"✓ Copiado":"⎘ Copiar TR"}
+            </button>
+          </div>
+        </div>}
+
+        {/* Editable field for Costco */}
+        {isC&&<div style={{...s.card,marginBottom:11}}>
+          <span style={s.lbl}>Núm. bajo código de barras — edita si hay error</span>
+          <input style={{...s.input,fontFamily:"monospace",fontSize:14}} value={editCB} onChange={e=>setEditCB(e.target.value)} placeholder="Número bajo el código de barras"/>
+          <button onClick={()=>copy(editCB,"cb_edit")} style={{...s.ghost,fontSize:11,padding:"5px 10px",marginTop:5}}>
+            {copied==="cb_edit"?"✓ Copiado":"⎘ Copiar"}
+          </button>
+        </div>}
+
         <div style={s.card}>
-          <span style={s.lbl}>Toca para copiar</span>
+          <span style={s.lbl}>Resto de datos — toca para copiar</span>
           {fields.map(f=>(
-            <div key={f.key} onClick={()=>copy(f.val,f.key)} style={{...s.row,borderColor:f.warn?.startsWith("⚠️")?"rgba(251,191,36,0.4)":C.border,background:f.warn?.startsWith("⚠️")?"rgba(251,191,36,0.06)":C.card}}>
+            <div key={f.key} onClick={()=>copy(f.val,f.key)} style={{...s.row}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:10,color:C.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.5px"}}>{f.label}</div>
                 <div style={{fontSize:15,fontWeight:600,marginTop:2,fontFamily:f.mono?"monospace":"inherit",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.val}</div>
-                {f.warn&&<div style={{fontSize:11,marginTop:3,color:f.warn.startsWith("⚠️")?C.yellow:C.green}}>{f.warn}</div>}
               </div>
               <span style={{fontSize:13,opacity:copied===f.key?1:0.2,color:copied===f.key?C.green:"#fff",transition:"all 0.2s",flexShrink:0}}>{copied===f.key?"✓":"⎘"}</span>
             </div>
@@ -357,7 +402,7 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
           ))}
         </div>}
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          <button style={s.btn} onClick={()=>{addTicket(ticketData,imgDataURL);setView("main")}}>✓ Agregar a {qLabel(activeQ)}</button>
+          <button style={s.btn} onClick={()=>{addTicket(getTicketToSave(),imgDataURL);setView("main")}}>✓ Agregar a {qLabel(activeQ)}</button>
           <button style={{...s.ghost,textAlign:"center"}} onClick={()=>{setGuideStore(STORES[ticketData.establecimiento]);setView("guide")}}>Ver guía para facturar →</button>
         </div>
       </div>
