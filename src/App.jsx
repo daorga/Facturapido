@@ -101,8 +101,9 @@ export default function App() {
 
   // ── OCR ──────────────────────────────────────────────────────────────
   const processImage = useCallback(async (file)=>{
-    if(!apiKey){ setError("Primero configura tu API key de Anthropic en ⚙️ Configuración"); setView("scan"); return }
-    setScanning(true); setError(null)
+const currentKey = localStorage.getItem("fr_api_key")||""
+if(!currentKey){ setError("Primero configura tu API key de Anthropic en ⚙️ Configuración"); setView("scan"); return }
+setScanning(true); setError(null)
     try { setImgDataURL(await toDataURL(file)) } catch{}
     let send=file
     try { send=await compressImg(file) } catch{}
@@ -110,7 +111,7 @@ export default function App() {
       const base64=await toB64(send)
       const resp=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+        headers:{"Content-Type":"application/json","x-api-key":currentKey,"anthropic-version":"2023-06-01"},
         body:JSON.stringify({
           model:"claude-opus-4-5",
           max_tokens:1024,
