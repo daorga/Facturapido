@@ -5,7 +5,7 @@ App para escanear tickets de Walmart, La Comer, Costco y Chedraui y gestionar tu
 ---
 
 ## Configuración paso a paso
-
+ 
 ### 1. Supabase
 
 1. Ve a [supabase.com](https://supabase.com) y crea un proyecto gratis
