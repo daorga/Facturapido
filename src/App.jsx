@@ -311,14 +311,14 @@ Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
   // ── RESULT VIEW ───────────────────────────────────────────────────────
   const ResultView=()=>{
     if(!ticketData) return null
-    const isW=ticketData.establecimiento==="walmart", isC=ticketData.establecimiento==="costco"
     const st=STORES[ticketData.establecimiento], tNum=parseAmt(ticketData.total)
     const newTotal=totalQ+tNum, newPct=meta>0?Math.min((newTotal/meta)*100,100):0
 
     // Editable key fields
     const [editTC, setEditTC] = React.useState(ticketData.tc||"")
     const [editTR, setEditTR] = React.useState(ticketData.tr||"")
-    const [editCB, setEditCB] = React.useState(ticketData.codigoBarras||"")
+    const isW=ticketData.establecimiento==="walmart", isC=ticketData.establecimiento==="costco"
+    const [editCB, setEditCB] = React.useState(isC?(ticketData.codigoBarras||""):(!isW&&!isC?(ticketData.folio||""):""))
     const tcValido = editTC.length===21
 
     const fields=[
