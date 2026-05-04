@@ -28,12 +28,12 @@ const compressImg = f => new Promise(resolve => {
   const img = new Image()
   img.onload = () => {
     try {
-      const MAX=1400, {naturalWidth:ow, naturalHeight:oh}=img
+      const MAX=2000, {naturalWidth:ow, naturalHeight:oh}=img
       let w=ow, h=oh
       if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX}else{w=Math.round(w*MAX/h);h=MAX} }
       const cv=document.createElement("canvas"); cv.width=w; cv.height=h
       cv.getContext("2d").drawImage(img,0,0,w,h)
-      cv.toBlob(b=>resolve(b&&b.size>0?b:f),"image/jpeg",0.85)
+      cv.toBlob(b=>resolve(b&&b.size>0?b:f),"image/jpeg",0.92)
     } catch { resolve(f) }
   }
   img.onerror=()=>resolve(f)
@@ -119,7 +119,9 @@ setScanning(true); setError(null)
             {type:"image",source:{type:"base64",media_type:"image/jpeg",data:base64}},
             {type:"text",text:`Analiza este ticket de supermercado mexicano. Responde SOLO con JSON válido, sin markdown ni texto extra:
 {"establecimiento":"walmart|lacomer|costco|chedraui|otro","nombreEstablecimiento":"texto","folio":"string|null","tc":"SOLO Walmart: campo TC|null","tr":"SOLO Walmart: campo TR|null","codigoBarras":"SOLO Costco: número bajo código de barras|null","fecha":"DD/MM/YYYY|null","hora":"HH:MM|null","total":numero_o_null,"subtotal":numero_o_null,"iva":numero_o_null,"sucursal":"string|null","confianza":"alta|media|baja"}
-WALMART TC: exactamente 21 dígitos. I→1, l→1, O→0, S→5, B→8, Z→2, G→6. Sin espacios.
+WALMART TC: es un número de EXACTAMENTE 21 dígitos consecutivos que aparece junto a las letras "TC" en el ticket. Lee cada dígito uno por uno de izquierda a derecha. Correcciones obligatorias: I→1, l→1, O→0, S→5, B→8, Z→2, G→6, q→9. Cuenta los dígitos al terminar — si no son exactamente 21 vuelve a leer. NUNCA agregues ni omitas dígitos. Sin espacios ni guiones.
+WALMART TR: el valor junto a las letras "TR" en el ticket, copiado exactamente.
+TODOS LOS NÚMEROS: lee con máxima precisión. Si un dígito no está claro, analiza el contexto (posición, grosor del trazo) para decidir entre opciones similares como 1/7, 0/6, 3/8, 5/6.
 COSTCO: número DEBAJO del código de barras, NO el de membresía.
 Total/subtotal/iva: número puro sin $ ni comas, ej: 1234.56`}
           ]}]
